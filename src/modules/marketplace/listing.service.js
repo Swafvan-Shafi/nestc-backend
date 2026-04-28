@@ -1,0 +1,141 @@
+const db = require('../../config/db');
+const { randomUUID } = require('crypto');
+
+const getListings = async (filters) => {
+  const { category, type, urgent, sellerId, status } = filters;
+  
+  // Default status logic:
+  // 1. If sellerId is provided (My Shop), show both active and traded.
+  // 2. Otherwise (Public Shop), show ONLY active listings.
+  let statusFilter = status;
+  if (!statusFilter) {
+    statusFilter = sellerId ? 'all' : 'active';
+  }
+  
+  let query = 'SELECT l.*, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE 1=1';
+  const params = [];
+
+  // USE 'traded' as it is the valid ENUM value in the database
+  if (statusFilter === 'active') {
+    query += " AND l.status = 'active'";
+  } else if (statusFilter === 'sold' || statusFilter === 'traded') {
+    query += " AND l.status = 'traded'";
+  } else if (statusFilter === 'all') {
+    query += " AND (l.status = 'active' OR l.status = 'traded')";
+  }
+
+  if (category && category !== 'All') {
+    params.push(category.toLowerCase());
+    query += ` AND l.category = $${params.length}`;
+  }
+
+  if (type) {
+    params.push(type.toLowerCase());
+    query += ` AND l.type = $${params.length}`;
+  }
+
+  if (urgent === 'true') {
+    query += ' AND l.is_urgent = true';
+  }
+
+  if (sellerId) {
+    params.push(sellerId);
+    query += ` AND l.seller_id = $${params.length}`;
+  }
+
+  query += ' ORDER BY l.created_at DESC';
+
+  const result = await db.query(query, params);
+  const rows = result.rows || [];
+  
+  for (let listing of rows) {
+    const photos = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = $1 ORDER BY display_order ASC', [listing.id]);
+    listing.photos = (photos.rows || []).map(p => p.photo_url);
+  }
+
+  return rows;
+};
+
+const createListing = async (listingData, sellerId) => {
+  const { title, description, category, type, price, is_urgent, is_free, photo } = listingData;
+  const listingId = randomUUID();
+
+  try {
+    let dbCategory = (category || 'other').toLowerCase();
+    const validCategories = ['books', 'stationery', 'electronics', 'lab', 'clothes', 'cycles', 'other'];
+    if (dbCategory.includes('cloth')) dbCategory = 'clothes';
+    if (!validCategories.includes(dbCategory)) dbCategory = 'other';
+
+    const dbType = (type || 'have').toLowerCase();
+
+    await db.query(
+      `INSERT INTO listings (id, seller_id, title, description, category, type, price, is_urgent, is_free, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active')`,
+      [
+        listingId, 
+        sellerId, 
+        title || 'Untitled Listing', 
+        description || '', 
+        dbCategory, 
+        dbType, 
+        parseFloat(price) || 0, 
+        is_urgent ? 1 : 0, 
+        is_free ? 1 : 0
+      ]
+    );
+
+    if (photo) {
+      await db.query(
+        'INSERT INTO listing_photos (id, listing_id, photo_url, display_order) VALUES ($1, $2, $3, $4)',
+        [randomUUID(), listingId, photo, 0]
+      );
+    }
+
+    return { id: listingId, ...listingData, seller_id: sellerId };
+  } catch (err) {
+    console.error('Database Error in createListing:', err.message);
+    throw err;
+  }
+};
+
+const getListingById = async (id) => {
+  const result = await db.query(
+    'SELECT l.*, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE l.id = $1',
+    [id]
+  );
+  const rows = result.rows || [];
+  if (rows.length === 0) throw new Error('Listing not found');
+
+  const listing = rows[0];
+  const photos = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = $1 ORDER BY display_order ASC', [id]);
+  listing.photos = (photos.rows || []).map(p => p.photo_url);
+
+  await db.query('UPDATE listings SET views_count = views_count + 1 WHERE id = $1', [id]);
+
+  return listing;
+};
+
+const markTraded = async (id, sellerId) => {
+  // Use 'traded' as it matches the ENUM in your database schema
+  await db.query(
+    "UPDATE listings SET status = 'traded', traded_at = NOW() WHERE id = $1 AND seller_id = $2",
+    [id, sellerId]
+  );
+  return { message: 'Item marked as SOLD' };
+};
+
+const deleteListing = async (id, sellerId) => {
+  await db.query(
+    'DELETE FROM listings WHERE id = $1 AND seller_id = $2',
+    [id, sellerId]
+  );
+  return { message: 'Listing permanently removed' };
+};
+
+module.exports = {
+  getListings,
+  createListing,
+  getListingById,
+  markTraded,
+  deleteListing
+};

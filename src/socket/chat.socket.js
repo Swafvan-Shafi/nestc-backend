@@ -1,0 +1,101 @@
+const db = require('../config/db');
+const { randomUUID } = require('crypto');
+const { sendChatNotification } = require('../utils/mailer');
+
+const registerChatHandlers = (io, socket) => {
+  socket.on('register_user', (userId) => {
+    socket.join(`user_${userId}`);
+    console.log(`📡 User ${userId} registered for global notifications`);
+  });
+
+  socket.on('join_chat', (chatId) => {
+    socket.join(chatId);
+  });
+
+  socket.on('send_message', async (data) => {
+    const { chatId, senderId, receiverId, content, listingId } = data;
+    
+    try {
+      const messageId = randomUUID();
+      let finalChatId = chatId;
+      let isFirstMessage = false;
+
+      if (chatId.startsWith('temp_')) {
+        const ids = [senderId, receiverId].sort();
+        finalChatId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+        isFirstMessage = true;
+      }
+
+      const existingChat = await db.query('SELECT id FROM chats WHERE id = $1', [finalChatId]);
+      if (existingChat.rows.length === 0) {
+        await db.query(
+          'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
+          [finalChatId, senderId, receiverId, listingId || null]
+        );
+        isFirstMessage = true;
+      } else if (listingId) {
+        await db.query('UPDATE chats SET listing_id = $1 WHERE id = $2 AND listing_id IS NULL', [listingId, finalChatId]);
+      }
+
+      await db.query(
+        'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id) VALUES ($1, $2, $3, $4, $5)',
+        [messageId, finalChatId, senderId, content, listingId || null]
+      );
+      
+      const message = {
+        id: messageId,
+        chat_id: finalChatId,
+        sender_id: senderId,
+        content: content,
+        listing_id: listingId || null,
+        created_at: new Date(),
+        is_read: false
+      };
+      
+      io.to(finalChatId).emit('new_message', { chatId: finalChatId, message });
+      io.to(chatId).emit('new_message', { chatId: finalChatId, message });
+
+      if (receiverId) {
+        io.to(`user_${receiverId}`).emit('new_message', { chatId: finalChatId, message });
+        
+        let displayBody = content;
+        if (content.startsWith('data:image')) displayBody = '📷 Sent a photo';
+        if (content.startsWith('PRODUCT_ENQUIRY:')) displayBody = '📦 New Product Enquiry';
+
+        io.to(`user_${receiverId}`).emit('notification', {
+          id: messageId,
+          type: 'chat',
+          title: 'New Message',
+          body: displayBody,
+          time: 'Just now',
+          read: false,
+          chatId: finalChatId
+        });
+
+        if (isFirstMessage) {
+           try {
+             const recipientRes = await db.query('SELECT email FROM users WHERE id = $1', [receiverId]);
+             const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
+             if (recipientRes.rows[0] && senderRes.rows[0]) {
+               sendChatNotification(recipientRes.rows[0].email, senderRes.rows[0].name, displayBody);
+             }
+           } catch (e) {}
+        }
+      }
+    } catch (err) {
+      console.error('❌ Delivery Error:', err.message);
+    }
+  });
+
+  socket.on('mark_read', async (data) => {
+    const { chatId, messageId } = data;
+    try {
+      await db.query('UPDATE chat_messages SET is_read = true WHERE id = $1', [messageId]);
+      io.to(chatId).emit('message_read', { chatId, messageId });
+    } catch (err) {
+      console.error('Error marking message read:', err.message);
+    }
+  });
+};
+
+module.exports = registerChatHandlers;
