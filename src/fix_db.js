@@ -1,12 +1,7 @@
 const mysql = require('mysql2/promise');
 
 async function fix() {
-  const connection = await mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'Thottath3/',
-    database: 'nestc'
-  });
+  const connection = await mysql.createConnection(process.env.DATABASE_URL);
 
   const addColumn = async (table, col, definition) => {
     try {
@@ -29,7 +24,7 @@ async function fix() {
     await addColumn('drivers', 'last_longitude', 'DECIMAL(11, 8)');
     await addColumn('drivers', 'vehicle_number', 'VARCHAR(20)');
     await addColumn('drivers', 'total_trips', 'INTEGER DEFAULT 0');
-    
+
     // Status sync
     await connection.query("UPDATE drivers SET status = 'available' WHERE status = 'free'");
 
