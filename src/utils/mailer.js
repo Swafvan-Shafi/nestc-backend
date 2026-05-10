@@ -1,12 +1,12 @@
-const SibApiV3Sdk = require('@getbrevo/brevo');
+const { TransactionalEmailsApi, SendSmtpEmail } = require('@getbrevo/brevo');
 require('dotenv').config();
 
-let apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+let apiInstance = new TransactionalEmailsApi();
 let apiKey = apiInstance.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
 
 const sendOTP = async (email, otp) => {
-  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  const sendSmtpEmail = new SendSmtpEmail();
 
   sendSmtpEmail.subject = 'NestC - Verify Your NITC Email';
   sendSmtpEmail.to = [{ email }];
@@ -38,7 +38,7 @@ const sendOTP = async (email, otp) => {
 };
 
 const sendChatNotification = async (email, senderName, messageContent) => {
-  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  const sendSmtpEmail = new SendSmtpEmail();
 
   sendSmtpEmail.subject = `New Message from ${senderName} on NestC`;
   sendSmtpEmail.to = [{ email }];
