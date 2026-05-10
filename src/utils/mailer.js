@@ -1,11 +1,17 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 const sendOTP = async (email, otp) => {
-  const { error } = await resend.emails.send({
-    from: 'NestC <onboarding@resend.dev>',
+  const mailOptions = {
+    from: `"NestC Support" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: 'NestC - Verify Your NITC Email',
     html: `
@@ -16,27 +22,28 @@ const sendOTP = async (email, otp) => {
         <div style="background: #f4f4f4; padding: 20px; text-align: center; border-radius: 10px; margin: 20px 0;">
           <span style="font-size: 32px; font-weight: bold; letter-spacing: 10px; color: #2E75B6;">${otp}</span>
         </div>
-        <p>This code will expire in 5 minutes.</p>
+        <p>This code will expire in 15 minutes.</p>
         <p style="color: #666; font-size: 12px; margin-top: 40px;">
           If you didn't request this, you can safely ignore this email.<br>
           NestC — Your Campus, Your Home.
         </p>
       </div>
     `
-  });
+  };
 
-  if (error) {
-    console.error(`❌ Failed to send OTP to ${email}:`, error);
-    throw new Error('Could not send verification email.');
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ OTP sent successfully to ${email}`);
+    return true;
+  } catch (err) {
+    console.error(`❌ Failed to send OTP to ${email}:`, err.message);
+    throw new Error('Could not send verification email. Please check server configuration.');
   }
-
-  console.log(`✅ OTP sent successfully to ${email}`);
-  return true;
 };
 
 const sendChatNotification = async (email, senderName, messageContent) => {
-  const { error } = await resend.emails.send({
-    from: 'NestC <onboarding@resend.dev>',
+  const mailOptions = {
+    from: `"NestC Marketplace" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: `New Message from ${senderName} on NestC`,
     html: `
@@ -47,20 +54,24 @@ const sendChatNotification = async (email, senderName, messageContent) => {
         <div style="background: #f4f4f4; padding: 20px; border-left: 4px solid #2E75B6; border-radius: 5px; margin: 20px 0; font-style: italic;">
           "${messageContent}"
         </div>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="http://127.0.0.1:3000/chat" style="background: #2E75B6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; font-weight: bold;">Reply on NestC</a>
+        </div>
         <p style="color: #666; font-size: 12px; margin-top: 40px;">
           NestC — Your Campus, Your Home.
         </p>
       </div>
     `
-  });
+  };
 
-  if (error) {
-    console.error(`❌ Failed to send chat email to ${email}:`, error);
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Chat notification email sent to ${email}`);
+    return true;
+  } catch (err) {
+    console.error(`❌ Failed to send chat email to ${email}:`, err.message);
     return false;
   }
-
-  console.log(`✅ Chat notification email sent to ${email}`);
-  return true;
 };
 
 module.exports = { sendOTP, sendChatNotification };
