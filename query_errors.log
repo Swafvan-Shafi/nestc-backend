@@ -120,3 +120,10 @@ Query: INSERT IGNORE INTO nitc_registered_emails (email) VALUES (), ()
 Params: []
 Error: Column count doesn't match value count at row 1
 -------------
+
+--- ERROR ---
+Time: 2026-05-11T10:46:24.561Z
+Query: ALTER TABLE chats MODIFY id VARCHAR(100)
+Params: []
+Error: Cannot change column 'id': used in a foreign key constraint 'chat_messages_ibfk_1' of table 'railway.chat_messages'
+-------------
