@@ -19,7 +19,7 @@ const registerChatHandlers = (io, socket) => {
       // Always use deterministic ID to ensure sync with frontend
       const ids = [senderId, receiverId].sort();
       const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
-      let finalChatId = listingId ? `${baseId}_${listingId.substring(0, 8)}` : baseId;
+      let finalChatId = listingId ? `${baseId}_listing${listingId}` : baseId;
       
       const messageId = randomUUID();
       let isFirstMessage = false;
