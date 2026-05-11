@@ -24,19 +24,19 @@ const registerChatHandlers = (io, socket) => {
       const messageId = randomUUID();
       let isFirstMessage = false;
 
-      const existingChat = await db.query('SELECT id FROM chats WHERE id = ?', [finalChatId]);
-      if (existingChat.length === 0 || !existingChat[0]) {
+      const existingChat = await db.query('SELECT id FROM chats WHERE id = $1', [finalChatId]);
+      if (!existingChat.rows || existingChat.rows.length === 0) {
         await db.query(
-          'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES (?, ?, ?, ?, 1)',
+          'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
           [finalChatId, senderId, receiverId, listingId || null]
         );
         isFirstMessage = true;
       } else if (listingId) {
-        await db.query('UPDATE chats SET listing_id = ? WHERE id = ? AND (listing_id IS NULL OR listing_id = "")', [listingId, finalChatId]);
+        await db.query('UPDATE chats SET listing_id = $1 WHERE id = $2 AND (listing_id IS NULL OR listing_id = "")', [listingId, finalChatId]);
       }
 
       await db.query(
-        'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id) VALUES ($1, $2, $3, $4, $5)',
         [messageId, finalChatId, senderId, content, listingId || null]
       );
       
@@ -74,22 +74,19 @@ const registerChatHandlers = (io, socket) => {
 
         if (isFirstMessage) {
            try {
-             const recipientRes = await db.query('SELECT name, email FROM users WHERE id = ?', [receiverId]);
-             const senderRes = await db.query('SELECT name FROM users WHERE id = ?', [senderId]);
+             const recipientRes = await db.query('SELECT name, email FROM users WHERE id = $1', [receiverId]);
+             const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
              
-             const recipient = recipientRes[0] || (recipientRes.rows ? recipientRes.rows[0] : null);
-             const sender = senderRes[0] || (senderRes.rows ? senderRes.rows[0] : null);
-
-             if (recipient && sender) {
+             if (recipientRes.rows && recipientRes.rows[0] && senderRes.rows && senderRes.rows[0]) {
                let productInfo = null;
                if (listingId) {
-                 const listingRes = await db.query('SELECT title, price FROM listings WHERE id = ?', [listingId]);
-                 productInfo = listingRes[0] || (listingRes.rows ? listingRes.rows[0] : null);
+                 const listingRes = await db.query('SELECT title, price FROM listings WHERE id = $1', [listingId]);
+                 productInfo = listingRes.rows[0];
                }
 
                await sendChatNotification(
-                 recipient.email, 
-                 sender.name, 
+                 recipientRes.rows[0].email, 
+                 senderRes.rows[0].name, 
                  displayBody,
                  productInfo,
                  finalChatId
@@ -108,7 +105,7 @@ const registerChatHandlers = (io, socket) => {
   socket.on('mark_read', async (data) => {
     const { chatId, userId } = data;
     try {
-      await db.query('UPDATE chat_messages SET is_read = 1 WHERE chat_id = ? AND sender_id != ?', [chatId, userId]);
+      await db.query('UPDATE chat_messages SET is_read = 1 WHERE chat_id = $1 AND sender_id != $2', [chatId, userId]);
       io.to(chatId).emit('chat_read', { chatId });
     } catch (err) {
       console.error('Error marking chat read:', err.message);
