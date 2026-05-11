@@ -200,7 +200,8 @@ const login = async (email, password) => {
       name: user.name, 
       email: user.email, 
       role: user.role,
-      hostel: user.hostel
+      hostel: user.hostel,
+      gender: user.gender
     } 
   };
 };
