@@ -4,9 +4,6 @@ const { randomUUID } = require('crypto');
 const getListings = async (filters) => {
   const { category, type, urgent, sellerId, status } = filters;
   
-  // Default status logic:
-  // 1. If sellerId is provided (My Shop), show both active and traded.
-  // 2. Otherwise (Public Shop), show ONLY active listings.
   let statusFilter = status;
   if (!statusFilter) {
     statusFilter = sellerId ? 'all' : 'active';
@@ -15,7 +12,6 @@ const getListings = async (filters) => {
   let query = "SELECT l.*, CASE WHEN l.is_urgent = 1 AND l.created_at >= NOW() - INTERVAL 24 HOUR THEN 1 ELSE 0 END AS is_urgent, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE 1=1";
   const params = [];
 
-  // USE 'traded' as it is the valid ENUM value in the database
   if (statusFilter === 'active') {
     query += " AND l.status = 'active'";
   } else if (statusFilter === 'sold' || statusFilter === 'traded') {
@@ -26,31 +22,32 @@ const getListings = async (filters) => {
 
   if (category && category !== 'All') {
     params.push(category.toLowerCase());
-    query += ` AND l.category = $${params.length}`;
+    query += " AND l.category = ?";
   }
 
   if (type) {
     params.push(type.toLowerCase());
-    query += ` AND l.type = $${params.length}`;
+    query += " AND l.type = ?";
   }
 
   if (urgent === 'true') {
-    query += ' AND l.is_urgent = true';
+    query += ' AND l.is_urgent = 1';
   }
 
   if (sellerId) {
     params.push(sellerId);
-    query += ` AND l.seller_id = $${params.length}`;
+    query += " AND l.seller_id = ?";
   }
 
   query += ' ORDER BY l.created_at DESC';
 
   const result = await db.query(query, params);
-  const rows = result.rows || [];
+  const rows = Array.isArray(result) ? result : (result.rows || []);
   
   for (let listing of rows) {
-    const photos = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = $1 ORDER BY display_order ASC', [listing.id]);
-    listing.photos = (photos.rows || []).map(p => p.photo_url);
+    const photosRes = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = ? ORDER BY display_order ASC', [listing.id]);
+    const photoRows = Array.isArray(photosRes) ? photosRes : (photosRes.rows || []);
+    listing.photos = photoRows.map(p => p.photo_url);
   }
 
   return rows;
@@ -65,10 +62,11 @@ const createListing = async (listingData, sellerId) => {
 
     if (isUrgentBool) {
       const checkUrgent = await db.query(
-        "SELECT id FROM listings WHERE seller_id = $1 AND is_urgent = 1 AND status = 'active' AND created_at >= NOW() - INTERVAL 24 HOUR",
+        "SELECT id FROM listings WHERE seller_id = ? AND is_urgent = 1 AND status = 'active' AND created_at >= NOW() - INTERVAL 24 HOUR",
         [sellerId]
       );
-      if (checkUrgent.rows && checkUrgent.rows.length > 0) {
+      const checkRows = Array.isArray(checkUrgent) ? checkUrgent : (checkUrgent.rows || []);
+      if (checkRows.length > 0) {
         throw new Error('You already have one active urgent listing. Please wait until it expires or remove it.');
       }
     }
@@ -82,7 +80,7 @@ const createListing = async (listingData, sellerId) => {
 
     await db.query(
       `INSERT INTO listings (id, seller_id, title, description, category, type, price, is_urgent, is_free, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
       [
         listingId, 
         sellerId, 
@@ -98,7 +96,7 @@ const createListing = async (listingData, sellerId) => {
 
     if (photo) {
       await db.query(
-        'INSERT INTO listing_photos (id, listing_id, photo_url, display_order) VALUES ($1, $2, $3, $4)',
+        'INSERT INTO listing_photos (id, listing_id, photo_url, display_order) VALUES (?, ?, ?, ?)',
         [randomUUID(), listingId, photo, 0]
       );
     }
@@ -112,27 +110,25 @@ const createListing = async (listingData, sellerId) => {
 
 const getListingById = async (id) => {
   const result = await db.query(
-    "SELECT l.*, CASE WHEN l.is_urgent = 1 AND l.created_at >= NOW() - INTERVAL 24 HOUR THEN 1 ELSE 0 END AS is_urgent, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE l.id = $1",
+    "SELECT l.*, CASE WHEN l.is_urgent = 1 AND l.created_at >= NOW() - INTERVAL 24 HOUR THEN 1 ELSE 0 END AS is_urgent, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE l.id = ?",
     [id]
   );
-  const rows = result.rows || [];
+  const rows = Array.isArray(result) ? result : (result.rows || []);
   if (rows.length === 0) throw new Error('Listing not found');
 
   const listing = rows[0];
-  const photos = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = $1 ORDER BY display_order ASC', [id]);
-  listing.photos = (photos.rows || []).map(p => p.photo_url);
+  const photosRes = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = ? ORDER BY display_order ASC', [id]);
+  const photoRows = Array.isArray(photosRes) ? photosRes : (photosRes.rows || []);
+  listing.photos = photoRows.map(p => p.photo_url);
 
-  await db.query('UPDATE listings SET views_count = views_count + 1 WHERE id = $1', [id]);
+  await db.query('UPDATE listings SET views_count = views_count + 1 WHERE id = ?', [id]);
 
   return listing;
 };
 
 const updateStatus = async (id, sellerId, status) => {
-  // Map 'sold' and 'purchased' to the existing 'traded' ENUM if necessary, or use the new values.
-  // Assuming the schema has been or will be updated to support 'sold' and 'purchased'.
-  // We'll update the status field directly.
   await db.query(
-    "UPDATE listings SET status = $1, traded_at = NOW() WHERE id = $2 AND seller_id = $3",
+    "UPDATE listings SET status = ?, traded_at = NOW() WHERE id = ? AND seller_id = ?",
     [status, id, sellerId]
   );
   return { message: `Item marked as ${status.toUpperCase()}` };
@@ -140,7 +136,7 @@ const updateStatus = async (id, sellerId, status) => {
 
 const deleteListing = async (id, sellerId) => {
   await db.query(
-    'DELETE FROM listings WHERE id = $1 AND seller_id = $2',
+    'DELETE FROM listings WHERE id = ? AND seller_id = ?',
     [id, sellerId]
   );
   return { message: 'Listing permanently removed' };
