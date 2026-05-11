@@ -12,8 +12,13 @@ const getListings = async (req, res) => {
 const createListing = async (req, res) => {
   console.log('--- CONTROLLER: createListing START ---');
   try {
+    console.log('--- CREATE LISTING REQUEST ---');
+    console.log('User:', req.user);
+    console.log('Body:', req.body);
+    console.log('File:', req.file);
+
     if (!req.user || !req.user.id) {
-      return res.status(400).json({ error: 'User not identified in request' });
+      return res.status(401).json({ error: 'User not authenticated' });
     }
 
     if (!req.body || Object.keys(req.body).length === 0) {
@@ -24,8 +29,8 @@ const createListing = async (req, res) => {
     console.log('Body:', JSON.stringify(req.body));
 
     const listingData = { ...req.body };
-    if (req.file) {
-      listingData.photo = `http://localhost:5000/uploads/${req.file.filename}`;
+    if (req.body.photo) {
+      listingData.photo = req.body.photo;
     } else if (req.body.imageUrl) {
       listingData.photo = req.body.imageUrl;
     }
@@ -36,10 +41,14 @@ const createListing = async (req, res) => {
   } catch (err) {
     console.error('--- CONTROLLER ERROR ---');
     console.error(err);
-    res.status(400).json({
-      error: 'Controller level failure',
+    
+    const statusCode = err.message.includes('authenticated') || err.message.includes('token') ? 401 : 500;
+    
+    res.status(statusCode).json({
+      error: 'Failed to create listing',
       details: err.message,
-      type: err.name
+      type: err.name,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 };

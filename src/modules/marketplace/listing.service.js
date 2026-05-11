@@ -105,7 +105,7 @@ const createListing = async (listingData, sellerId) => {
 
     return { id: listingId, ...listingData, seller_id: sellerId };
   } catch (err) {
-    console.error('Database Error in createListing:', err.message);
+    console.error('Database Error in createListing:', err);
     throw err;
   }
 };
