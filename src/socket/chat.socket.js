@@ -88,12 +88,12 @@ const registerChatHandlers = (io, socket) => {
   });
 
   socket.on('mark_read', async (data) => {
-    const { chatId, messageId } = data;
+    const { chatId, userId } = data;
     try {
-      await db.query('UPDATE chat_messages SET is_read = true WHERE id = $1', [messageId]);
-      io.to(chatId).emit('message_read', { chatId, messageId });
+      await db.query('UPDATE chat_messages SET is_read = 1 WHERE chat_id = $1 AND sender_id != $2', [chatId, userId]);
+      io.to(chatId).emit('chat_read', { chatId });
     } catch (err) {
-      console.error('Error marking message read:', err.message);
+      console.error('Error marking chat read:', err.message);
     }
   });
 };

@@ -6,5 +6,7 @@ const router = express.Router();
 
 router.get('/conversations', authMiddleware, chatController.getConversations);
 router.get('/messages/:chatId', authMiddleware, chatController.getMessages);
+router.get('/unread', authMiddleware, chatController.getUnreadMessages);
+router.post('/read/:chatId', authMiddleware, chatController.markAsRead);
 
 module.exports = router;

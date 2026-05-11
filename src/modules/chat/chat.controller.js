@@ -18,7 +18,27 @@ const getConversations = async (req, res) => {
   }
 };
 
+const getUnreadMessages = async (req, res) => {
+  try {
+    const unread = await chatService.getUnreadMessages(req.user.id);
+    res.json(unread);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const markAsRead = async (req, res) => {
+  try {
+    const result = await chatService.markAsRead(req.params.chatId, req.user.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = {
   getMessages,
-  getConversations
+  getConversations,
+  getUnreadMessages,
+  markAsRead
 };
