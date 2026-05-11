@@ -61,7 +61,9 @@ const createListing = async (listingData, sellerId) => {
   const listingId = randomUUID();
 
   try {
-    if (is_urgent) {
+    const isUrgentBool = is_urgent === 'true' || is_urgent === true;
+
+    if (isUrgentBool) {
       const checkUrgent = await db.query(
         "SELECT id FROM listings WHERE seller_id = $1 AND is_urgent = 1 AND status = 'active' AND created_at >= NOW() - INTERVAL 24 HOUR",
         [sellerId]
@@ -89,8 +91,8 @@ const createListing = async (listingData, sellerId) => {
         dbCategory, 
         dbType, 
         parseFloat(price) || 0, 
-        is_urgent ? 1 : 0, 
-        is_free ? 1 : 0
+        isUrgentBool ? 1 : 0, 
+        is_free === 'true' || is_free === true ? 1 : 0
       ]
     );
 

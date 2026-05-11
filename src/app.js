@@ -10,6 +10,7 @@ const vendingRoutes = require('./modules/vending/vending.routes');
 const marketplaceRoutes = require('./modules/marketplace/listing.routes');
 const bookingRoutes = require('./modules/bookings/booking.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
+const uploadRoutes = require('./modules/upload/upload.routes');
 
 // Import jobs
 require('./jobs/cleanup');
@@ -39,6 +40,7 @@ app.use('/api/v1/vending', vendingRoutes);
 app.use('/api/v1/marketplace/listings', marketplaceRoutes);
 app.use('/api/v1/bookings', bookingRoutes);
 app.use('/api/v1/chat', chatRoutes);
+app.use('/api/v1/upload', uploadRoutes);
 
 // Root route
 app.get('/', (req, res) => {
