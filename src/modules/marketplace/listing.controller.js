@@ -15,7 +15,7 @@ const createListing = async (req, res) => {
     if (!req.user || !req.user.id) {
       return res.status(400).json({ error: 'User not identified in request' });
     }
-    
+
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({ error: 'Empty request body' });
     }
@@ -25,7 +25,7 @@ const createListing = async (req, res) => {
 
     const listingData = { ...req.body };
     if (req.file) {
-      listingData.photo = `http://localhost:5000/uploads/${req.file.filename}`;
+      listingData.photo = req.file.path;
     } else if (req.body.imageUrl) {
       listingData.photo = req.body.imageUrl;
     }
@@ -36,8 +36,8 @@ const createListing = async (req, res) => {
   } catch (err) {
     console.error('--- CONTROLLER ERROR ---');
     console.error(err);
-    res.status(400).json({ 
-      error: 'Controller level failure', 
+    res.status(400).json({
+      error: 'Controller level failure',
       details: err.message,
       type: err.name
     });
