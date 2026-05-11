@@ -25,7 +25,7 @@ const createListing = async (req, res) => {
 
     const listingData = { ...req.body };
     if (req.file) {
-      listingData.photo = req.file.path;
+      listingData.photo = `http://localhost:5000/uploads/${req.file.filename}`;
     } else if (req.body.imageUrl) {
       listingData.photo = req.body.imageUrl;
     }
