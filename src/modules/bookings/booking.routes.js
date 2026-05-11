@@ -10,5 +10,6 @@ router.get('/active', authMiddleware, bookingController.getActivePasses); // Rol
 router.post('/:id/accept', bookingController.acceptBooking); // Public for driver acceptance
 router.post('/:id/reject', bookingController.rejectBooking); // Public for driver rejection
 router.patch('/:id/reached', authMiddleware, bookingController.markReached);
+router.post('/driver/status', bookingController.updateDriverStatus); // Public for drivers
 
 module.exports = router;

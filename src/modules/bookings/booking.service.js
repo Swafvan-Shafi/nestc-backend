@@ -17,72 +17,76 @@ const createBooking = async (bookingData, studentId) => {
 
   try {
     console.log(`[DISPATCH] New ride request: ${id}`);
-    console.log(`[DISPATCH] Student Location: ${startLat}, ${startLng}`);
     
     await db.pool.query(
       'INSERT INTO bookings (id, student_id, vehicle_type, pickup_location, destination, hostel, scheduled_time, booking_code, status, pickup_lat, pickup_lng) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "pending", ?, ?)',
       [id, studentId, vehicle_type, pickup_location, destination, hostel, scheduled_time, booking_code, startLat, startLng]
     );
 
-    // Filter free drivers
-    const [driversResult] = await db.pool.query(
-      'SELECT id, name, last_latitude, last_longitude, phone FROM drivers WHERE status = "available" AND is_approved = true AND vehicle_type = ?',
+    // Get all free drivers
+    const [freeDrivers] = await db.pool.query(
+      'SELECT id, name, phone FROM drivers WHERE status = "available" AND is_approved = true AND vehicle_type = ?',
       [vehicle_type]
     );
 
-    let driversWithDistance = driversResult.map(driver => {
-      const dLat = parseFloat(driver.last_latitude);
-      const dLng = parseFloat(driver.last_longitude);
-      // Distance from pickup point
-      const pickupDist = calculateDistance(startLat, startLng, dLat, dLng);
-      // Distance from NITC Center
-      const centerDist = calculateDistance(NITC_LAT, NITC_LNG, dLat, dLng);
-      return { ...driver, distance: pickupDist, centerDist };
+    if (freeDrivers.length === 0) {
+      throw new Error('No drivers are currently Free. Please try again in a few minutes.');
+    }
+
+    // Mock sending WhatsApp message to all free drivers
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    freeDrivers.forEach(driver => {
+      const acceptLink = `${frontendUrl}/ride/accept/${booking_code}/${driver.id}`;
+      console.log(`\n[WHATSAPP MOCK] To ${driver.name} (${driver.phone}):
+      NEW RIDE REQUEST!
+      From: ${pickup_location}
+      To: ${destination}
+      Accept Ride: ${acceptLink}\n`);
     });
-
-    // FILTER: Only drivers within 2km of NITC campus
-    let filteredDrivers = driversWithDistance.filter(d => d.centerDist <= 2.0);
-
-    // SORT: By distance to pickup point
-    filteredDrivers.sort((a, b) => a.distance - b.distance);
-    
-    console.log(`[DISPATCH] Found ${filteredDrivers.length} drivers within 2km of NITC`);
 
     const [bookingRows] = await db.pool.query('SELECT * FROM bookings WHERE id = ?', [id]);
     
-    if (filteredDrivers.length === 0) {
-      throw new Error('No drivers available nearby. Please try again in a few minutes.');
-    }
-
-    // REAL FLOW: Do NOT auto-accept. Wait for the real WhatsApp link to be clicked.
-    return { booking: bookingRows[0], suggestedDrivers: filteredDrivers.slice(0, 5) };
+    return { booking: bookingRows[0], notifiedDriversCount: freeDrivers.length };
   } catch (err) {
     console.error('Create Booking Error Details:', err);
     throw err;
   }
 };
 
-const acceptBooking = async (bookingId, driverId, location) => {
-  const { lat, lng } = location;
-
+const acceptBooking = async (bookingCode, driverId) => {
   try {
-    const [bookingCheck] = await db.pool.query('SELECT status FROM bookings WHERE id = ?', [bookingId]);
-    if (bookingCheck.length === 0) throw new Error('Booking not found');
-    if (bookingCheck[0].status !== 'pending') throw new Error('Booking already taken or cancelled');
+    // Attempt atomic update to prevent race conditions
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const gatePassUrl = `${frontendUrl}/gate-pass/${bookingCode}`;
 
-    await db.pool.query(
-      'UPDATE bookings SET driver_id = ?, status = "accepted", accepted_at = NOW(), gate_pass_url = ?, gate_pass_expires_at = DATE_ADD(NOW(), INTERVAL 35 MINUTE) WHERE id = ?',
-      [driverId, `http://localhost:3000/gate-pass/${bookingId}`, bookingId]
+    const [updateResult] = await db.pool.query(
+      'UPDATE bookings SET driver_id = ?, status = "accepted", accepted_at = NOW(), gate_pass_url = ?, gate_pass_expires_at = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE booking_code = ? AND status = "pending"',
+      [driverId, gatePassUrl, bookingCode]
     );
 
-    await db.pool.query('UPDATE drivers SET status = "busy", last_latitude = ?, last_longitude = ?, location_updated_at = NOW() WHERE id = ?', [lat, lng, driverId]);
+    if (updateResult.affectedRows === 0) {
+      // Check why it failed
+      const [check] = await db.pool.query('SELECT status FROM bookings WHERE booking_code = ?', [bookingCode]);
+      if (check.length === 0) throw new Error('Booking not found');
+      if (check[0].status !== 'pending') throw new Error('This ride has already been accepted by another driver.');
+      throw new Error('Failed to accept booking');
+    }
 
-    const [updatedRows] = await db.pool.query('SELECT * FROM bookings WHERE id = ?', [bookingId]);
+    // Mark driver as busy
+    await db.pool.query('UPDATE drivers SET status = "busy" WHERE id = ?', [driverId]);
+
+    const [updatedRows] = await db.pool.query('SELECT * FROM bookings WHERE booking_code = ?', [bookingCode]);
     return updatedRows[0];
   } catch (err) {
     console.error('Accept Booking Error Details:', err);
     throw err;
   }
+};
+
+const updateDriverStatus = async (driverId, status) => {
+  if (!['available', 'busy'].includes(status)) throw new Error('Invalid status');
+  await db.pool.query('UPDATE drivers SET status = ? WHERE id = ?', [status, driverId]);
+  return { message: `Driver status updated to ${status}` };
 };
 
 const getMyBookings = async (studentId) => {
@@ -143,5 +147,6 @@ module.exports = {
   rejectBooking,
   getMyBookings,
   getActivePasses,
-  markReached
+  markReached,
+  updateDriverStatus
 };

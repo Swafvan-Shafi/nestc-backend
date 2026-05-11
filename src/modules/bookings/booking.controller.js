@@ -11,9 +11,9 @@ const createBooking = async (req, res) => {
 
 const acceptBooking = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { driverId, location } = req.body;
-    const result = await bookingService.acceptBooking(id, driverId, location);
+    const { id } = req.params; // Using booking code as id
+    const { driverId } = req.body;
+    const result = await bookingService.acceptBooking(id, driverId);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -58,11 +58,22 @@ const rejectBooking = async (req, res) => {
   }
 };
 
+const updateDriverStatus = async (req, res) => {
+  try {
+    const { driverId, status } = req.body;
+    const result = await bookingService.updateDriverStatus(driverId, status);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
 module.exports = {
   createBooking,
   acceptBooking,
   rejectBooking,
   getMyBookings,
   getActivePasses,
-  markReached
+  markReached,
+  updateDriverStatus
 };
