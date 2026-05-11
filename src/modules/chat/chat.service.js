@@ -1,4 +1,5 @@
 const db = require('../../config/db');
+const { randomUUID } = require('crypto');
 
 const getMessages = async (chatId) => {
   const result = await db.query(
@@ -41,7 +42,7 @@ const getUnreadMessages = async (userId) => {
      FROM chat_messages m
      JOIN chats c ON m.chat_id = c.id
      JOIN users u ON m.sender_id = u.id
-     LEFT JOIN listings l ON m.listing_id = l.id
+     LEFT JOIN listings l ON c.listing_id = l.id
      WHERE (c.buyer_id = $1 OR c.seller_id = $1)
      AND m.sender_id != $1
      AND m.is_read = 0
@@ -51,9 +52,36 @@ const getUnreadMessages = async (userId) => {
   return result.rows || [];
 };
 
+const getOrCreateConversation = async (buyerId, sellerId, listingId) => {
+  // Try to find existing conversation for this specific product
+  let query = 'SELECT * FROM chats WHERE buyer_id = $1 AND seller_id = $2';
+  let params = [buyerId, sellerId];
+  
+  if (listingId) {
+    query += ' AND listing_id = $3';
+    params.push(listingId);
+  } else {
+    query += ' AND listing_id IS NULL';
+  }
+
+  const existing = await db.query(query, params);
+  if (existing.rows.length > 0) return existing.rows[0];
+
+  // Create new
+  const id = randomUUID();
+  await db.query(
+    'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
+    [id, buyerId, sellerId, listingId || null]
+  );
+  
+  const created = await db.query('SELECT * FROM chats WHERE id = $1', [id]);
+  return created.rows[0];
+};
+
 module.exports = {
   getMessages,
   getConversations,
   markAsRead,
-  getUnreadMessages
+  getUnreadMessages,
+  getOrCreateConversation
 };

@@ -22,7 +22,8 @@ const registerChatHandlers = (io, socket) => {
 
       if (chatId.startsWith('temp_')) {
         const ids = [senderId, receiverId].sort();
-        finalChatId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+        const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+        finalChatId = listingId ? `${baseId}_${listingId.substring(0, 8)}` : baseId;
         isFirstMessage = true;
       }
 
@@ -60,7 +61,9 @@ const registerChatHandlers = (io, socket) => {
         
         let displayBody = content;
         if (content.startsWith('data:image')) displayBody = '📷 Sent a photo';
-        if (content.startsWith('PRODUCT_ENQUIRY:')) displayBody = '📦 New Product Enquiry';
+        
+        const isProductEnquiry = content.startsWith('PRODUCT_ENQUIRY:');
+        if (isProductEnquiry) displayBody = '📦 New Product Enquiry';
 
         io.to(`user_${receiverId}`).emit('notification', {
           id: messageId,
@@ -74,12 +77,27 @@ const registerChatHandlers = (io, socket) => {
 
         if (isFirstMessage) {
            try {
-             const recipientRes = await db.query('SELECT email FROM users WHERE id = $1', [receiverId]);
+             const recipientRes = await db.query('SELECT name, email FROM users WHERE id = $1', [receiverId]);
              const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
+             
              if (recipientRes.rows[0] && senderRes.rows[0]) {
-               sendChatNotification(recipientRes.rows[0].email, senderRes.rows[0].name, displayBody);
+               let productInfo = null;
+               if (listingId) {
+                 const listingRes = await db.query('SELECT title, price FROM listings WHERE id = $1', [listingId]);
+                 productInfo = listingRes.rows[0];
+               }
+
+               await sendChatNotification(
+                 recipientRes.rows[0].email, 
+                 senderRes.rows[0].name, 
+                 displayBody,
+                 productInfo,
+                 finalChatId
+               );
              }
-           } catch (e) {}
+           } catch (e) {
+             console.error('Email Error:', e.message);
+           }
         }
       }
     } catch (err) {

@@ -36,9 +36,20 @@ const markAsRead = async (req, res) => {
   }
 };
 
+const createConversation = async (req, res) => {
+  try {
+    const { sellerId, listingId } = req.body;
+    const conversation = await chatService.getOrCreateConversation(req.user.id, sellerId, listingId);
+    res.json(conversation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = {
   getMessages,
   getConversations,
   getUnreadMessages,
-  markAsRead
+  markAsRead,
+  createConversation
 };
