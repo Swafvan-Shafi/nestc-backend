@@ -42,11 +42,11 @@ const getListings = async (filters) => {
   query += ' ORDER BY l.created_at DESC';
 
   const result = await db.query(query, params);
-  const rows = Array.isArray(result) ? result : (result.rows || []);
+  const rows = result.rows || result || [];
   
   for (let listing of rows) {
     const photosRes = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = ? ORDER BY display_order ASC', [listing.id]);
-    const photoRows = Array.isArray(photosRes) ? photosRes : (photosRes.rows || []);
+    const photoRows = photosRes.rows || photosRes || [];
     listing.photos = photoRows.map(p => p.photo_url);
   }
 
@@ -65,7 +65,7 @@ const createListing = async (listingData, sellerId) => {
         "SELECT id FROM listings WHERE seller_id = ? AND is_urgent = 1 AND status = 'active' AND created_at >= NOW() - INTERVAL 24 HOUR",
         [sellerId]
       );
-      const checkRows = Array.isArray(checkUrgent) ? checkUrgent : (checkUrgent.rows || []);
+      const checkRows = checkUrgent.rows || checkUrgent || [];
       if (checkRows.length > 0) {
         throw new Error('You already have one active urgent listing. Please wait until it expires or remove it.');
       }
@@ -113,12 +113,12 @@ const getListingById = async (id) => {
     "SELECT l.*, CASE WHEN l.is_urgent = 1 AND l.created_at >= NOW() - INTERVAL 24 HOUR THEN 1 ELSE 0 END AS is_urgent, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE l.id = ?",
     [id]
   );
-  const rows = Array.isArray(result) ? result : (result.rows || []);
+  const rows = result.rows || result || [];
   if (rows.length === 0) throw new Error('Listing not found');
 
   const listing = rows[0];
   const photosRes = await db.query('SELECT photo_url FROM listing_photos WHERE listing_id = ? ORDER BY display_order ASC', [id]);
-  const photoRows = Array.isArray(photosRes) ? photosRes : (photosRes.rows || []);
+  const photoRows = photosRes.rows || photosRes || [];
   listing.photos = photoRows.map(p => p.photo_url);
 
   await db.query('UPDATE listings SET views_count = views_count + 1 WHERE id = ?', [id]);
