@@ -53,28 +53,20 @@ const getUnreadMessages = async (userId) => {
 };
 
 const getOrCreateConversation = async (buyerId, sellerId, listingId) => {
-  // Try to find existing conversation for this specific product
-  let query = 'SELECT * FROM chats WHERE buyer_id = $1 AND seller_id = $2';
-  let params = [buyerId, sellerId];
-  
-  if (listingId) {
-    query += ' AND listing_id = $3';
-    params.push(listingId);
-  } else {
-    query += ' AND listing_id IS NULL';
-  }
+  const ids = [buyerId, sellerId].sort();
+  const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+  const finalChatId = listingId ? `${baseId}_${listingId.substring(0, 8)}` : baseId;
 
-  const existing = await db.query(query, params);
-  if (existing.rows.length > 0) return existing.rows[0];
+  const existing = await db.query('SELECT * FROM chats WHERE id = $1', [finalChatId]);
+  if (existing.rows && existing.rows.length > 0) return existing.rows[0];
 
   // Create new
-  const id = randomUUID();
   await db.query(
     'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
-    [id, buyerId, sellerId, listingId || null]
+    [finalChatId, buyerId, sellerId, listingId || null]
   );
   
-  const created = await db.query('SELECT * FROM chats WHERE id = $1', [id]);
+  const created = await db.query('SELECT * FROM chats WHERE id = $1', [finalChatId]);
   return created.rows[0];
 };
 
