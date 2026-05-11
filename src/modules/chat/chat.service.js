@@ -55,7 +55,7 @@ const getUnreadMessages = async (userId) => {
 const getOrCreateConversation = async (buyerId, sellerId, listingId) => {
   const ids = [buyerId, sellerId].sort();
   const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
-  const finalChatId = listingId ? `${baseId}_${listingId.substring(0, 8)}` : baseId;
+  const finalChatId = listingId ? `${baseId}_listing${listingId}` : baseId;
 
   const existing = await db.query('SELECT * FROM chats WHERE id = $1', [finalChatId]);
   if (existing.rows && existing.rows.length > 0) return existing.rows[0];

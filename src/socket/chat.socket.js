@@ -50,8 +50,8 @@ const registerChatHandlers = (io, socket) => {
         is_read: false
       };
       
+      // Emit to the deterministic room
       io.to(finalChatId).emit('new_message', { chatId: finalChatId, message });
-      io.to(chatId).emit('new_message', { chatId: finalChatId, message });
 
       if (receiverId) {
         io.to(`user_${receiverId}`).emit('new_message', { chatId: finalChatId, message });
@@ -72,7 +72,9 @@ const registerChatHandlers = (io, socket) => {
           chatId: finalChatId
         });
 
+        // Send email if it's the first message in this thread
         if (isFirstMessage) {
+           console.log(`📧 Attempting to send enquiry email to receiver ${receiverId}`);
            try {
              const recipientRes = await db.query('SELECT name, email FROM users WHERE id = $1', [receiverId]);
              const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
@@ -84,6 +86,7 @@ const registerChatHandlers = (io, socket) => {
                  productInfo = listingRes.rows[0];
                }
 
+               console.log(`📧 Sending mail to ${recipientRes.rows[0].email}...`);
                await sendChatNotification(
                  recipientRes.rows[0].email, 
                  senderRes.rows[0].name, 
@@ -91,14 +94,16 @@ const registerChatHandlers = (io, socket) => {
                  productInfo,
                  finalChatId
                );
+             } else {
+               console.warn('⚠️ Could not find recipient or sender info for email');
              }
            } catch (e) {
-             console.error('Email Error:', e.message);
+             console.error('❌ Email Notification Error:', e.message);
            }
         }
       }
     } catch (err) {
-      console.error('❌ Delivery Error:', err.message);
+      console.error('❌ Socket Message Delivery Error:', err.message);
     }
   });
 
