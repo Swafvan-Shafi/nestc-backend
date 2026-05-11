@@ -12,7 +12,7 @@ const getListings = async (filters) => {
     statusFilter = sellerId ? 'all' : 'active';
   }
   
-  let query = 'SELECT l.*, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE 1=1';
+  let query = "SELECT l.*, CASE WHEN l.is_urgent = 1 AND l.created_at >= NOW() - INTERVAL 24 HOUR THEN 1 ELSE 0 END AS is_urgent, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE 1=1";
   const params = [];
 
   // USE 'traded' as it is the valid ENUM value in the database
@@ -61,6 +61,16 @@ const createListing = async (listingData, sellerId) => {
   const listingId = randomUUID();
 
   try {
+    if (is_urgent) {
+      const checkUrgent = await db.query(
+        "SELECT id FROM listings WHERE seller_id = $1 AND is_urgent = 1 AND status = 'active' AND created_at >= NOW() - INTERVAL 24 HOUR",
+        [sellerId]
+      );
+      if (checkUrgent.rows && checkUrgent.rows.length > 0) {
+        throw new Error('You already have one active urgent listing. Please wait until it expires or remove it.');
+      }
+    }
+
     let dbCategory = (category || 'other').toLowerCase();
     const validCategories = ['books', 'stationery', 'electronics', 'lab', 'clothes', 'cycles', 'other'];
     if (dbCategory.includes('cloth')) dbCategory = 'clothes';
@@ -100,7 +110,7 @@ const createListing = async (listingData, sellerId) => {
 
 const getListingById = async (id) => {
   const result = await db.query(
-    'SELECT l.*, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE l.id = $1',
+    "SELECT l.*, CASE WHEN l.is_urgent = 1 AND l.created_at >= NOW() - INTERVAL 24 HOUR THEN 1 ELSE 0 END AS is_urgent, u.name as seller_name, u.hostel as seller_hostel FROM listings l JOIN users u ON l.seller_id = u.id WHERE l.id = $1",
     [id]
   );
   const rows = result.rows || [];

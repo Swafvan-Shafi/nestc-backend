@@ -23,7 +23,12 @@ const createListing = async (req, res) => {
     console.log('User ID:', req.user.id);
     console.log('Body:', JSON.stringify(req.body));
 
-    const listing = await listingService.createListing(req.body, req.user.id);
+    const listingData = { ...req.body };
+    if (req.file) {
+      listingData.photo = `http://localhost:5000/uploads/${req.file.filename}`;
+    }
+
+    const listing = await listingService.createListing(listingData, req.user.id);
     console.log('Listing created successfully');
     res.status(201).json(listing);
   } catch (err) {
