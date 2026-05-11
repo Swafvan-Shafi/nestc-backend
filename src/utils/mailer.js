@@ -1,18 +1,22 @@
 require('dotenv').config();
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 const sendOTP = async (email, otp) => {
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'api-key': process.env.BREVO_API_KEY
-    },
-    body: JSON.stringify({
-      sender: { name: 'NestC Support', email: 'nestnitc@gmail.com' },
-      to: [{ email }],
+  console.log(`--- MAILER: Sending OTP to ${email} ---`);
+  try {
+    const mailOptions = {
+      from: `"NestC Support" <${process.env.EMAIL_USER}>`,
+      to: email,
       subject: 'NestC - Verify Your NITC Email',
-      htmlContent: `
+      html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e1e1; border-radius: 10px;">
           <h2 style="color: #0f4c81; text-align: center;">Welcome to NestC</h2>
           <p>Hello student,</p>
@@ -27,40 +31,33 @@ const sendOTP = async (email, otp) => {
           </p>
         </div>
       `
-    })
-  });
+    };
 
-  if (!response.ok) {
-    const err = await response.json();
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ OTP sent successfully to ${email}`);
+    return true;
+  } catch (err) {
     console.error(`❌ Failed to send OTP to ${email}:`, err);
-    throw new Error('Could not send verification email.');
+    return false;
   }
-
-  console.log(`✅ OTP sent successfully to ${email}`);
-  return true;
 };
 
 const sendChatNotification = async (email, senderName, messageContent, productInfo, chatId) => {
-  const productHtml = productInfo ? `
-    <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-      <p style="margin: 0; font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 0.05em;">Regarding Product</p>
-      <p style="margin: 5px 0 0 0; font-size: 16px; font-weight: bold; color: #1e293b;">${productInfo.title}</p>
-      <p style="margin: 5px 0 0 0; font-size: 14px; color: #2E75B6; font-weight: bold;">₹${productInfo.price}</p>
-    </div>
-  ` : '';
+  console.log(`--- MAILER: Sending Chat Notification to ${email} ---`);
+  try {
+    const productHtml = productInfo ? `
+      <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <p style="margin: 0; font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 0.05em;">Regarding Product</p>
+        <p style="margin: 5px 0 0 0; font-size: 16px; font-weight: bold; color: #1e293b;">${productInfo.title}</p>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: #2E75B6; font-weight: bold;">₹${productInfo.price}</p>
+      </div>
+    ` : '';
 
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'api-key': process.env.BREVO_API_KEY
-    },
-    body: JSON.stringify({
-      sender: { name: 'NestC Marketplace', email: 'nestnitc@gmail.com' },
-      to: [{ email }],
+    const mailOptions = {
+      from: `"NestC Marketplace" <${process.env.EMAIL_USER}>`,
+      to: email,
       subject: `New Enquiry from ${senderName} - NestC`,
-      htmlContent: `
+      html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 16px; color: #334155;">
           <h2 style="color: #0f4c81; margin-top: 0;">New Message Received</h2>
           <p>Hi there,</p>
@@ -83,17 +80,15 @@ const sendChatNotification = async (email, senderName, messageContent, productIn
           <p style="color: #94a3b8; font-size: 12px; text-align: center;">NestC — Your Campus, Your Home.</p>
         </div>
       `
-    })
-  });
+    };
 
-  if (!response.ok) {
-    const err = await response.json();
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Chat notification email sent to ${email}`);
+    return true;
+  } catch (err) {
     console.error(`❌ Failed to send chat email to ${email}:`, err);
     return false;
   }
-
-  console.log(`✅ Chat notification email sent to ${email}`);
-  return true;
 };
 
 module.exports = { sendOTP, sendChatNotification };
