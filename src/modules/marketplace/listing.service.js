@@ -127,13 +127,15 @@ const getListingById = async (id) => {
   return listing;
 };
 
-const markTraded = async (id, sellerId) => {
-  // Use 'traded' as it matches the ENUM in your database schema
+const updateStatus = async (id, sellerId, status) => {
+  // Map 'sold' and 'purchased' to the existing 'traded' ENUM if necessary, or use the new values.
+  // Assuming the schema has been or will be updated to support 'sold' and 'purchased'.
+  // We'll update the status field directly.
   await db.query(
-    "UPDATE listings SET status = 'traded', traded_at = NOW() WHERE id = $1 AND seller_id = $2",
-    [id, sellerId]
+    "UPDATE listings SET status = $1, traded_at = NOW() WHERE id = $2 AND seller_id = $3",
+    [status, id, sellerId]
   );
-  return { message: 'Item marked as SOLD' };
+  return { message: `Item marked as ${status.toUpperCase()}` };
 };
 
 const deleteListing = async (id, sellerId) => {
@@ -148,6 +150,6 @@ module.exports = {
   getListings,
   createListing,
   getListingById,
-  markTraded,
+  updateStatus,
   deleteListing
 };

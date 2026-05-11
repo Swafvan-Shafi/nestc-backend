@@ -53,9 +53,13 @@ const getListingById = async (req, res) => {
   }
 };
 
-const markTraded = async (req, res) => {
+const updateStatus = async (req, res) => {
   try {
-    const result = await listingService.markTraded(req.params.id, req.user.id);
+    const { status } = req.body;
+    if (!status || !['sold', 'purchased'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const result = await listingService.updateStatus(req.params.id, req.user.id, status);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -75,6 +79,6 @@ module.exports = {
   getListings,
   createListing,
   getListingById,
-  markTraded,
+  updateStatus,
   deleteListing
 };

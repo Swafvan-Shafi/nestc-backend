@@ -38,7 +38,7 @@ const router = express.Router();
 router.get('/', authMiddleware, listingController.getListings);
 router.post('/', authMiddleware, upload.single('photo'), listingController.createListing);
 router.get('/:id', authMiddleware, listingController.getListingById);
-router.patch('/:id/traded', authMiddleware, listingController.markTraded);
+router.patch('/:id/status', authMiddleware, listingController.updateStatus);
 router.delete('/:id', authMiddleware, listingController.deleteListing);
 
 module.exports = router;
