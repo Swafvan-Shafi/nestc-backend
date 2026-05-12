@@ -27,38 +27,32 @@ const registerChatHandlers = (io, socket) => {
     
     try {
       if (!senderId || !receiverId) {
-        console.error('❌ Missing senderId or receiverId in send_message');
         if (callback) callback({ success: false, error: 'Missing IDs' });
         return;
       }
 
-      // Always use deterministic ID to ensure sync with frontend
+      // 1. Determine Deterministic Chat ID
       const ids = [senderId, receiverId].sort();
       const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
       let finalChatId = listingId ? `${baseId}_listing${listingId}` : baseId;
-      console.log(`📡 Final Chat ID: ${finalChatId}`);
       
       const messageId = randomUUID();
-      let isFirstMessage = false;
 
+      // 2. Ensure Chat record exists
       const existingChat = await db.query('SELECT id FROM chats WHERE id = $1', [finalChatId]);
       if (!existingChat.rows || existingChat.rows.length === 0) {
-        console.log(`🆕 Creating new chat record: ${finalChatId}`);
         await db.query(
           'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
           [finalChatId, senderId, receiverId, listingId || null]
         );
-      } else if (listingId) {
-        await db.query('UPDATE chats SET listing_id = $1 WHERE id = $2 AND (listing_id IS NULL OR listing_id = "")', [listingId, finalChatId]);
       }
 
+      // 3. Check for First Message (for email logic)
       const msgCountRes = await db.query('SELECT COUNT(*) as count FROM chat_messages WHERE chat_id = $1', [finalChatId]);
-      isFirstMessage = parseInt(msgCountRes.rows[0].count) === 0;
-      console.log(`📊 Message count for chat ${finalChatId}: ${msgCountRes.rows[0].count}. IsFirst: ${isFirstMessage}`);
+      const isFirstMessage = parseInt(msgCountRes.rows[0].count) === 0;
 
+      // 4. Save Message
       const pContextStr = productContext ? JSON.stringify(productContext) : null;
-
-      console.log('💾 Saving message to DB...');
       const room = io.sockets.adapter.rooms.get(finalChatId);
       const isDelivered = (room && room.size > 1) ? 1 : 0;
       
@@ -66,8 +60,7 @@ const registerChatHandlers = (io, socket) => {
         'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id, product_context, is_delivered) VALUES ($1, $2, $3, $4, $5, $6, $7)',
         [messageId, finalChatId, senderId, content, listingId || null, pContextStr, isDelivered]
       );
-      console.log(`✅ Message saved successfully (Delivered: ${isDelivered})`);
-      
+
       const message = {
         id: messageId,
         chat_id: finalChatId,
@@ -80,64 +73,41 @@ const registerChatHandlers = (io, socket) => {
         is_delivered: !!isDelivered
       };
       
-      // Acknowledge the sender immediately
+      // 5. Acknowledge Sender (Triggers Single Tick)
       if (callback) callback({ success: true, message });
 
-      // Emit to the deterministic room
+      // 6. Broadcast
       io.to(finalChatId).emit('new_message', { chatId: finalChatId, message });
-
       if (receiverId) {
-        // Also notify specifically the user's global listener
         io.to(`user_${receiverId}`).emit('new_message', { chatId: finalChatId, message });
         
-        let displayBody = content;
-        if (content.startsWith('data:image')) displayBody = '📷 Sent a photo';
-        
-        const isProductEnquiry = content.startsWith('PRODUCT_ENQUIRY:');
-        if (isProductEnquiry) displayBody = '📦 New Product Enquiry';
-
-        io.to(`user_${receiverId}`).emit('notification', {
-          id: messageId,
-          type: 'chat',
-          title: 'New Message',
-          body: displayBody,
-          time: 'Just now',
-          read: false,
-          chatId: finalChatId
-        });
-
-        // Send email if it's the first message in this thread OR it has product context (new enquiry click)
-        if (isFirstMessage || productContext) {
-            console.log(`📧 Triggering enquiry email (IsFirst: ${isFirstMessage}, HasContext: ${!!productContext})`);
+        // 7. First Message Email Logic
+        if (isFirstMessage && productContext) {
+            console.log(`📧 Sending first-message inquiry email for ${finalChatId}`);
             try {
               const recipientRes = await db.query('SELECT name, email FROM users WHERE id = $1', [receiverId]);
               const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
               
-              if (recipientRes.rows && recipientRes.rows[0] && senderRes.rows && senderRes.rows[0]) {
+              if (recipientRes.rows?.[0] && senderRes.rows?.[0]) {
                 let productInfo = null;
                 if (listingId) {
                   const listingRes = await db.query('SELECT title, price FROM listings WHERE id = $1', [listingId]);
-                  productInfo = listingRes.rows[0];
+                  productInfo = listingRes.rows?.[0];
                 }
 
-                console.log(`📧 Sending mail to ${recipientRes.rows[0].email}...`);
                 await sendChatNotification(
                   recipientRes.rows[0].email, 
                   senderRes.rows[0].name, 
-                  displayBody,
+                  content,
                   productInfo,
                   finalChatId
                 );
-              } else {
-                console.warn('⚠️ Could not find recipient or sender info for email');
               }
-            } catch (e) {
-              console.error('❌ Email Notification Error:', e.message);
-            }
+            } catch (e) { console.error('❌ Email Error:', e.message); }
         }
       }
     } catch (err) {
-      console.error('❌ Socket Message Delivery Error:', err.message);
+      console.error('❌ Send Message Error:', err.message);
       if (callback) callback({ success: false, error: err.message });
     }
   });
@@ -147,9 +117,7 @@ const registerChatHandlers = (io, socket) => {
     try {
       await db.query('UPDATE chat_messages SET is_read = 1 WHERE chat_id = $1 AND sender_id != $2', [chatId, userId]);
       io.to(chatId).emit('chat_read', { chatId });
-    } catch (err) {
-      console.error('Error marking chat read:', err.message);
-    }
+    } catch (err) { console.error('Error marking chat read:', err.message); }
   });
 };
 
