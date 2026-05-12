@@ -97,10 +97,31 @@ const getOrCreateConversation = async (buyerId, sellerId, listingId) => {
   return created.rows[0];
 };
 
+const deleteConversation = async (chatId, userId) => {
+  // First verify the user belongs to this chat
+  const chat = await db.query('SELECT * FROM chats WHERE id = $1', [chatId]);
+  if (!chat.rows || chat.rows.length === 0) {
+    throw new Error('Chat not found');
+  }
+  
+  const c = chat.rows[0];
+  if (c.buyer_id !== userId && c.seller_id !== userId) {
+    throw new Error('Unauthorized to delete this chat');
+  }
+
+  // Delete messages first
+  await db.query('DELETE FROM chat_messages WHERE chat_id = $1', [chatId]);
+  // Delete the chat record
+  await db.query('DELETE FROM chats WHERE id = $1', [chatId]);
+  
+  return { success: true };
+};
+
 module.exports = {
   getMessages,
   getConversations,
   markAsRead,
   getUnreadMessages,
-  getOrCreateConversation
+  getOrCreateConversation,
+  deleteConversation
 };

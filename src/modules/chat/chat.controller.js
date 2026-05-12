@@ -46,10 +46,20 @@ const createConversation = async (req, res) => {
   }
 };
 
+const deleteConversation = async (req, res) => {
+  try {
+    const result = await chatService.deleteConversation(req.params.chatId, req.user.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = {
   getMessages,
   getConversations,
   getUnreadMessages,
   markAsRead,
-  createConversation
+  createConversation,
+  deleteConversation
 };
