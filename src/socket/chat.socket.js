@@ -21,13 +21,14 @@ const registerChatHandlers = (io, socket) => {
     }
   });
 
-  socket.on('send_message', async (data) => {
+  socket.on('send_message', async (data, callback) => {
     console.log('📬 Socket Received send_message:', JSON.stringify(data, null, 2));
     const { chatId, senderId, receiverId, content, listingId, productContext } = data;
     
     try {
       if (!senderId || !receiverId) {
         console.error('❌ Missing senderId or receiverId in send_message');
+        if (callback) callback({ success: false, error: 'Missing IDs' });
         return;
       }
 
@@ -79,6 +80,9 @@ const registerChatHandlers = (io, socket) => {
         is_delivered: !!isDelivered
       };
       
+      // Acknowledge the sender immediately
+      if (callback) callback({ success: true, message });
+
       // Emit to the deterministic room
       io.to(finalChatId).emit('new_message', { chatId: finalChatId, message });
 
@@ -134,6 +138,7 @@ const registerChatHandlers = (io, socket) => {
       }
     } catch (err) {
       console.error('❌ Socket Message Delivery Error:', err.message);
+      if (callback) callback({ success: false, error: err.message });
     }
   });
 
