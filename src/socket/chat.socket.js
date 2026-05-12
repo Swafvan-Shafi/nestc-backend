@@ -88,9 +88,9 @@ const registerChatHandlers = (io, socket) => {
           chatId: finalChatId
         });
 
-        // Send email if it's the first message in this thread
-        if (isFirstMessage) {
-            console.log(`📧 Attempting to send enquiry email to receiver ${receiverId}`);
+        // Send email if it's the first message in this thread OR it has product context (new enquiry click)
+        if (isFirstMessage || productContext) {
+            console.log(`📧 Triggering enquiry email (IsFirst: ${isFirstMessage}, HasContext: ${!!productContext})`);
             try {
               const recipientRes = await db.query('SELECT name, email FROM users WHERE id = $1', [receiverId]);
               const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
