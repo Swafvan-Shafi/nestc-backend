@@ -127,3 +127,31 @@ Query: ALTER TABLE chats MODIFY id VARCHAR(100)
 Params: []
 Error: Cannot change column 'id': used in a foreign key constraint 'chat_messages_ibfk_1' of table 'railway.chat_messages'
 -------------
+
+--- ERROR ---
+Time: 2026-05-12T05:37:55.792Z
+Query: INSERT INTO chats (id, buyer_id, seller_id, is_active) VALUES (?, ?, ?, 1)
+Params: []
+Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '?, ?, ?, 1)' at line 1
+-------------
+
+--- ERROR ---
+Time: 2026-05-12T05:38:20.393Z
+Query: INSERT INTO chats (id, buyer_id, seller_id, is_active) VALUES (, , , 1)
+Params: []
+Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ', , , 1)' at line 1
+-------------
+
+--- ERROR ---
+Time: 2026-05-12T05:38:40.334Z
+Query: INSERT INTO chats (id, buyer_id, seller_id, is_active) VALUES (, , , 1)
+Params: []
+Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ', , , 1)' at line 1
+-------------
+
+--- ERROR ---
+Time: 2026-05-12T05:42:05.040Z
+Query: SELECT * FROM chat_messages WHERE sender_id =  OR chat_id IN (SELECT id FROM chats WHERE buyer_id =  OR seller_id = )
+Params: []
+Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'OR chat_id IN (SELECT id FROM chats WHERE buyer_id =  OR seller_id = )' at line 1
+-------------

@@ -14,10 +14,11 @@ const getListings = async (filters) => {
 
   if (statusFilter === 'active') {
     query += " AND l.status = 'active'";
-  } else if (statusFilter === 'sold' || statusFilter === 'traded') {
-    query += " AND l.status = 'traded'";
+  } else if (statusFilter === 'sold' || statusFilter === 'purchased' || statusFilter === 'traded') {
+    params.push(statusFilter);
+    query += ` AND l.status = $${params.length}`;
   } else if (statusFilter === 'all') {
-    query += " AND (l.status = 'active' OR l.status = 'traded')";
+    query += " AND (l.status = 'active' OR l.status = 'sold' OR l.status = 'purchased' OR l.status = 'traded')";
   }
 
   if (category && category !== 'All') {
