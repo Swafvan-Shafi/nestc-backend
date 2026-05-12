@@ -19,7 +19,7 @@ const getConversations = async (userId) => {
             u.id as other_user_id,
             u.email as other_user_email,
             l.title as product_name,
-            l.photo as product_image,
+            (SELECT photo_url FROM listing_photos WHERE listing_id = l.id ORDER BY display_order ASC LIMIT 1) as product_image,
             l.price as product_price,
             (SELECT content FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
             (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time,
