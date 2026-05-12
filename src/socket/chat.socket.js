@@ -14,18 +14,26 @@ const registerChatHandlers = (io, socket) => {
 
   socket.on('send_message', async (data) => {
     const { chatId, senderId, receiverId, content, listingId, productContext } = data;
+    console.log(`📩 Incoming message from ${senderId} to ${receiverId}: "${content.substring(0, 20)}..."`);
     
     try {
+      if (!senderId || !receiverId) {
+        console.error('❌ Missing senderId or receiverId in send_message');
+        return;
+      }
+
       // Always use deterministic ID to ensure sync with frontend
       const ids = [senderId, receiverId].sort();
       const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
       let finalChatId = listingId ? `${baseId}_listing${listingId}` : baseId;
+      console.log(`📡 Final Chat ID: ${finalChatId}`);
       
       const messageId = randomUUID();
       let isFirstMessage = false;
 
       const existingChat = await db.query('SELECT id FROM chats WHERE id = $1', [finalChatId]);
       if (!existingChat.rows || existingChat.rows.length === 0) {
+        console.log(`🆕 Creating new chat record: ${finalChatId}`);
         await db.query(
           'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
           [finalChatId, senderId, receiverId, listingId || null]
@@ -36,13 +44,16 @@ const registerChatHandlers = (io, socket) => {
 
       const msgCountRes = await db.query('SELECT COUNT(*) as count FROM chat_messages WHERE chat_id = $1', [finalChatId]);
       isFirstMessage = parseInt(msgCountRes.rows[0].count) === 0;
+      console.log(`📊 Message count for chat ${finalChatId}: ${msgCountRes.rows[0].count}. IsFirst: ${isFirstMessage}`);
 
       const pContextStr = productContext ? JSON.stringify(productContext) : null;
 
+      console.log('💾 Saving message to DB...');
       await db.query(
         'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id, product_context) VALUES ($1, $2, $3, $4, $5, $6)',
         [messageId, finalChatId, senderId, content, listingId || null, pContextStr]
       );
+      console.log('✅ Message saved successfully');
       
       const message = {
         id: messageId,
@@ -79,32 +90,32 @@ const registerChatHandlers = (io, socket) => {
 
         // Send email if it's the first message in this thread
         if (isFirstMessage) {
-           console.log(`📧 Attempting to send enquiry email to receiver ${receiverId}`);
-           try {
-             const recipientRes = await db.query('SELECT name, email FROM users WHERE id = $1', [receiverId]);
-             const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
-             
-             if (recipientRes.rows && recipientRes.rows[0] && senderRes.rows && senderRes.rows[0]) {
-               let productInfo = null;
-               if (listingId) {
-                 const listingRes = await db.query('SELECT title, price FROM listings WHERE id = $1', [listingId]);
-                 productInfo = listingRes.rows[0];
-               }
+            console.log(`📧 Attempting to send enquiry email to receiver ${receiverId}`);
+            try {
+              const recipientRes = await db.query('SELECT name, email FROM users WHERE id = $1', [receiverId]);
+              const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
+              
+              if (recipientRes.rows && recipientRes.rows[0] && senderRes.rows && senderRes.rows[0]) {
+                let productInfo = null;
+                if (listingId) {
+                  const listingRes = await db.query('SELECT title, price FROM listings WHERE id = $1', [listingId]);
+                  productInfo = listingRes.rows[0];
+                }
 
-               console.log(`📧 Sending mail to ${recipientRes.rows[0].email}...`);
-               await sendChatNotification(
-                 recipientRes.rows[0].email, 
-                 senderRes.rows[0].name, 
-                 displayBody,
-                 productInfo,
-                 finalChatId
-               );
-             } else {
-               console.warn('⚠️ Could not find recipient or sender info for email');
-             }
-           } catch (e) {
-             console.error('❌ Email Notification Error:', e.message);
-           }
+                console.log(`📧 Sending mail to ${recipientRes.rows[0].email}...`);
+                await sendChatNotification(
+                  recipientRes.rows[0].email, 
+                  senderRes.rows[0].name, 
+                  displayBody,
+                  productInfo,
+                  finalChatId
+                );
+              } else {
+                console.warn('⚠️ Could not find recipient or sender info for email');
+              }
+            } catch (e) {
+              console.error('❌ Email Notification Error:', e.message);
+            }
         }
       }
     } catch (err) {
