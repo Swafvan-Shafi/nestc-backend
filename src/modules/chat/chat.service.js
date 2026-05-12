@@ -74,13 +74,20 @@ const getUnreadMessages = async (userId) => {
 
 const getOrCreateConversation = async (buyerId, sellerId, listingId) => {
   const ids = [buyerId, sellerId].sort();
-  const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
-  const finalChatId = listingId ? `${baseId}_listing${listingId}` : baseId;
+  // Standardized ID for any conversation between these two users
+  const finalChatId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
 
   const existing = await db.query('SELECT * FROM chats WHERE id = $1', [finalChatId]);
-  if (existing.rows && existing.rows.length > 0) return existing.rows[0];
+  
+  if (existing.rows && existing.rows.length > 0) {
+    // If listingId is provided and different from current, update it to the latest context
+    if (listingId && existing.rows[0].listing_id !== listingId) {
+      await db.query('UPDATE chats SET listing_id = $1 WHERE id = $2', [listingId, finalChatId]);
+    }
+    return { ...existing.rows[0], listing_id: listingId || existing.rows[0].listing_id };
+  }
 
-  // Create new
+  // Create new unified chat
   await db.query(
     'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
     [finalChatId, buyerId, sellerId, listingId || null]
