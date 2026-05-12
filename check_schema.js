@@ -2,10 +2,14 @@ const db = require('./src/config/db');
 
 async function checkSchema() {
   try {
-    const [rows] = await db.pool.query('DESCRIBE bookings');
-    console.log('--- BOOKINGS SCHEMA ---');
-    console.log(JSON.stringify(rows, null, 2));
-    console.log('-----------------------');
+    console.log('--- CHATS SCHEMA ---');
+    const chats = await db.query('DESCRIBE chats');
+    console.table(chats.rows);
+
+    console.log('--- MESSAGES SCHEMA ---');
+    const messages = await db.query('DESCRIBE chat_messages');
+    console.table(messages.rows);
+
     process.exit(0);
   } catch (err) {
     console.error('Error:', err.message);
