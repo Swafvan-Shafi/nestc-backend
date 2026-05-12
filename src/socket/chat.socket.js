@@ -13,8 +13,8 @@ const registerChatHandlers = (io, socket) => {
   });
 
   socket.on('send_message', async (data) => {
+    console.log('📬 Socket Received send_message:', JSON.stringify(data, null, 2));
     const { chatId, senderId, receiverId, content, listingId, productContext } = data;
-    console.log(`📩 Incoming message from ${senderId} to ${receiverId}: "${content.substring(0, 20)}..."`);
     
     try {
       if (!senderId || !receiverId) {

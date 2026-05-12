@@ -90,8 +90,9 @@ const sendChatNotification = async (email, senderName, messageContent, productIn
       `
     };
 
+    console.log(`📧 Preparing to send mail to ${email} with subject: ${mailOptions.subject}`);
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Chat notification email sent to ${email}`);
+    console.log(`✅ Chat notification email sent successfully to ${email}`);
     return true;
   } catch (err) {
     console.error(`❌ Failed to send chat email to ${email}:`, err);
