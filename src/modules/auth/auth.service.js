@@ -31,29 +31,33 @@ const register = async (userData) => {
   }
 
   const id = randomUUID();
-
-  // Step 3: Send OTP and wait for confirmation
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Increased to 10 mins for reliability
 
+  const payload = { id, name, email };
+
+  // Step 3: Store OTP in Database (UPSERT)
   try {
-    await sendOTP(email, otp);
-  } catch (e) {
-    console.error('Error sending OTP:', e);
-    throw new Error('Email does not exist. Please enter a valid NITC email ID');
+    await db.query(
+      'INSERT INTO otps (email, otp, expires_at, user_data) VALUES ($1, $2, $3, $4) ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at), user_data = VALUES(user_data)',
+      [email, otp, expiresAt, JSON.stringify(payload)]
+    );
+  } catch (dbErr) {
+    console.error('Database Error during OTP storage:', dbErr);
+    throw new Error('System busy. Please try again in a moment.');
   }
 
-  const payload = {
-    id, name, email
+  // Step 4: Send OTP in background (DON'T AWAIT)
+  // This makes the frontend respond instantly
+  sendOTP(email, otp).catch(e => {
+    console.error('⚠️ Background OTP Send Failed:', e.message);
+  });
+
+  return { 
+    message: 'OTP sent! Please check your NITC email (and Spam folder).', 
+    requiresOTP: true, 
+    email 
   };
-
-  // Store OTP and user data in Database (upsert)
-  await db.query(
-    'INSERT INTO otps (email, otp, expires_at, user_data) VALUES ($1, $2, $3, $4) ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at), user_data = VALUES(user_data)',
-    [email, otp, expiresAt, JSON.stringify(payload)]
-  );
-
-  return { message: 'OTP sent successfully. Please check your email.', requiresOTP: true, email };
 };
 
 const verifyEmail = async (email, otp) => {
@@ -116,21 +120,20 @@ const forgotPassword = async (email) => {
   }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
-  try {
-    await sendOTP(email, otp);
-  } catch (e) {
-    console.error('Error sending OTP:', e);
-    throw new Error('Email does not exist. Please enter your registered email ID');
-  }
-
+  // Store OTP in DB first
   await db.query(
     'INSERT INTO otps (email, otp, expires_at, user_data) VALUES ($1, $2, $3, NULL) ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at), user_data = NULL',
     [email, otp, expiresAt]
   );
 
-  return { message: 'OTP sent successfully. Please check your email.' };
+  // Send OTP in background
+  sendOTP(email, otp).catch(e => {
+    console.error('⚠️ Background ForgotPassword OTP Failed:', e.message);
+  });
+
+  return { message: 'Password reset OTP sent! Please check your email.' };
 };
 
 const resetPassword = async (token, password) => {
