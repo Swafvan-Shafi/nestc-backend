@@ -30,10 +30,12 @@ const registerChatHandlers = (io, socket) => {
           'INSERT INTO chats (id, buyer_id, seller_id, listing_id, is_active) VALUES ($1, $2, $3, $4, 1)',
           [finalChatId, senderId, receiverId, listingId || null]
         );
-        isFirstMessage = true;
       } else if (listingId) {
         await db.query('UPDATE chats SET listing_id = $1 WHERE id = $2 AND (listing_id IS NULL OR listing_id = "")', [listingId, finalChatId]);
       }
+
+      const msgCountRes = await db.query('SELECT COUNT(*) as count FROM chat_messages WHERE chat_id = $1', [finalChatId]);
+      isFirstMessage = parseInt(msgCountRes.rows[0].count) === 0;
 
       const pContextStr = productContext ? JSON.stringify(productContext) : null;
 
