@@ -13,8 +13,10 @@ const registerChatHandlers = (io, socket) => {
     socket.join(chatId);
     if (socket.userId) {
       try {
-        await db.query('UPDATE chat_messages SET is_delivered = 1 WHERE chat_id = $1 AND sender_id != $2', [chatId, socket.userId]);
+        await db.query('UPDATE chat_messages SET is_delivered = 1, is_read = 1 WHERE chat_id = $1 AND sender_id != $2', [chatId, socket.userId]);
         io.to(chatId).emit('messages_delivered', { chatId });
+        // Emit 'messages_read' to clear notifications on other devices/windows
+        io.to(`user_${socket.userId}`).emit('messages_read', { chatId });
       } catch (err) {
         console.error('Error marking messages as delivered:', err);
       }
@@ -31,10 +33,9 @@ const registerChatHandlers = (io, socket) => {
         return;
       }
 
-      // 1. Determine Deterministic Chat ID
+      // 1. Determine Deterministic Chat ID (Unified P2P)
       const ids = [senderId, receiverId].sort();
-      const baseId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
-      let finalChatId = listingId ? `${baseId}_listing${listingId}` : baseId;
+      const finalChatId = `p2p_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
       
       const messageId = randomUUID();
 
@@ -81,6 +82,20 @@ const registerChatHandlers = (io, socket) => {
       if (receiverId) {
         io.to(`user_${receiverId}`).emit('new_message', { chatId: finalChatId, message });
         
+        // 7. Emit 'notification' for the Dropdown
+        const senderRes = await db.query('SELECT name FROM users WHERE id = $1', [senderId]);
+        const senderName = senderRes.rows?.[0]?.name || 'Student';
+        
+        io.to(`user_${receiverId}`).emit('notification', {
+          id: messageId,
+          type: 'chat',
+          title: `Message from ${senderName}`,
+          body: content,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          read: false,
+          chatId: finalChatId
+        });
+        
         // 7. First Message Email Logic
         if (isFirstMessage && productContext) {
             console.log(`📧 Sending first-message inquiry email for ${finalChatId}`);
@@ -112,8 +127,7 @@ const registerChatHandlers = (io, socket) => {
     }
   });
 
-  socket.on('mark_read', async (data) => {
-    const { chatId, userId } = data;
+  socket.on('mark_read', async ({ chatId, userId }) => {
     try {
       await db.query('UPDATE chat_messages SET is_read = 1 WHERE chat_id = $1 AND sender_id != $2', [chatId, userId]);
       io.to(chatId).emit('chat_read', { chatId });
