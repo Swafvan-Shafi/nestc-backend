@@ -13,7 +13,7 @@ const registerChatHandlers = (io, socket) => {
   });
 
   socket.on('send_message', async (data) => {
-    const { chatId, senderId, receiverId, content, listingId } = data;
+    const { chatId, senderId, receiverId, content, listingId, productContext } = data;
     
     try {
       // Always use deterministic ID to ensure sync with frontend
@@ -35,9 +35,11 @@ const registerChatHandlers = (io, socket) => {
         await db.query('UPDATE chats SET listing_id = $1 WHERE id = $2 AND (listing_id IS NULL OR listing_id = "")', [listingId, finalChatId]);
       }
 
+      const pContextStr = productContext ? JSON.stringify(productContext) : null;
+
       await db.query(
-        'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id) VALUES ($1, $2, $3, $4, $5)',
-        [messageId, finalChatId, senderId, content, listingId || null]
+        'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id, product_context) VALUES ($1, $2, $3, $4, $5, $6)',
+        [messageId, finalChatId, senderId, content, listingId || null, pContextStr]
       );
       
       const message = {
@@ -46,6 +48,7 @@ const registerChatHandlers = (io, socket) => {
         sender_id: senderId,
         content: content,
         listing_id: listingId || null,
+        product_context: productContext || null,
         created_at: new Date(),
         is_read: false
       };

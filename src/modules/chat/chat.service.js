@@ -6,7 +6,10 @@ const getMessages = async (chatId) => {
     'SELECT * FROM chat_messages WHERE chat_id = $1 ORDER BY created_at ASC',
     [chatId]
   );
-  return result.rows || [];
+  return (result.rows || []).map(msg => ({
+    ...msg,
+    product_context: typeof msg.product_context === 'string' ? JSON.parse(msg.product_context) : msg.product_context
+  }));
 };
 
 const getConversations = async (userId) => {
@@ -15,12 +18,15 @@ const getConversations = async (userId) => {
             u.name as other_user_name,
             u.id as other_user_id,
             c.listing_id,
-            c.seller_id as chat_seller_id,
+            l.title as product_name,
+            l.photo as product_image,
+            l.price as product_price,
             (SELECT content FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
             (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time,
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = 0) as unread_count
      FROM chats c
      JOIN users u ON (u.id = c.buyer_id OR u.id = c.seller_id) AND u.id != $1
+     LEFT JOIN listings l ON c.listing_id = l.id
      WHERE c.buyer_id = $1 OR c.seller_id = $1
      ORDER BY last_message_time DESC`,
     [userId]
