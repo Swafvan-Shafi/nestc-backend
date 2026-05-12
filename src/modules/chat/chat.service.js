@@ -25,10 +25,10 @@ const getConversations = async (userId) => {
             (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time,
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = 0) as unread_count
      FROM chats c
-     JOIN users u ON u.id = (CASE WHEN c.buyer_id = $1 THEN c.seller_id ELSE c.buyer_id END)
+     LEFT JOIN users u ON u.id = (CASE WHEN c.buyer_id = $1 THEN c.seller_id ELSE c.buyer_id END)
      LEFT JOIN listings l ON c.listing_id = l.id
      WHERE c.buyer_id = $1 OR c.seller_id = $1
-     ORDER BY last_message_time DESC`,
+     ORDER BY COALESCE((SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1), c.created_at) DESC`,
     [userId]
   );
   return result.rows || [];
