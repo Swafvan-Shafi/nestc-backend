@@ -21,8 +21,8 @@ const register = async (userData) => {
     throw new Error('Please enter a valid NITC email ID (e.g. name_b240314cs@nitc.ac.in)');
   }
 
-  const existingUser = await db.query('SELECT id FROM users WHERE email = ?', [email]);
-  if (existingUser[0].length > 0) {
+  const existingUser = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+  if (existingUser.rows.length > 0) {
     throw new Error('This email is already registered. Please login instead.');
   }
 
@@ -33,7 +33,7 @@ const register = async (userData) => {
 
   try {
     await db.query(
-      'INSERT INTO otps (email, otp, expires_at, user_data) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at), user_data = VALUES(user_data)',
+      'INSERT INTO otps (email, otp, expires_at, user_data) VALUES ($1, $2, $3, $4) ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at), user_data = VALUES(user_data)',
       [email, otp, expiresAt, JSON.stringify(payload)]
     );
   } catch (dbErr) {
@@ -55,12 +55,12 @@ const register = async (userData) => {
 };
 
 const verifyEmail = async (email, otp) => {
-  const [rows] = await db.query(
-    'SELECT otp, expires_at, user_data FROM otps WHERE email = ?',
+  const result = await db.query(
+    'SELECT otp, expires_at, user_data FROM otps WHERE email = $1',
     [email]
   );
 
-  const record = rows[0];
+  const record = result.rows[0];
 
   if (!record || record.otp !== otp || new Date(record.expires_at) < new Date()) {
     throw new Error('Invalid or expired OTP. Please try again.');
@@ -70,7 +70,7 @@ const verifyEmail = async (email, otp) => {
     ? (typeof record.user_data === 'string' ? JSON.parse(record.user_data) : record.user_data)
     : null;
 
-  await db.query('DELETE FROM otps WHERE email = ?', [email]);
+  await db.query('DELETE FROM otps WHERE email = $1', [email]);
 
   const type = userData ? 'register' : 'reset_password';
   const token = jwt.sign(
@@ -95,7 +95,7 @@ const setupPassword = async (token, password, additionalData) => {
 
     await db.query(
       `INSERT INTO users (id, name, email, password_hash, hostel, room_number, phone, gender, is_verified)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, true)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`,
       [userData.id, userData.name, userData.email, passwordHash, hostel, room_number, phone, gender]
     );
 
@@ -109,8 +109,8 @@ const setupPassword = async (token, password, additionalData) => {
 };
 
 const forgotPassword = async (email) => {
-  const [rows] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
-  if (rows.length === 0) {
+  const result = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+  if (result.rows.length === 0) {
     throw new Error('Email does not exist. Please enter your registered email ID');
   }
 
@@ -118,7 +118,7 @@ const forgotPassword = async (email) => {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
   await db.query(
-    'INSERT INTO otps (email, otp, expires_at, user_data) VALUES (?, ?, ?, NULL) ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at), user_data = NULL',
+    'INSERT INTO otps (email, otp, expires_at, user_data) VALUES ($1, $2, $3, NULL) ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at), user_data = NULL',
     [email, otp, expiresAt]
   );
 
@@ -138,7 +138,7 @@ const resetPassword = async (token, password) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    await db.query('UPDATE users SET password_hash = ? WHERE email = ?', [passwordHash, decoded.email]);
+    await db.query('UPDATE users SET password_hash = $1 WHERE email = $2', [passwordHash, decoded.email]);
 
     return { message: 'Password reset successful. Please login with your new password.' };
   } catch (err) {
@@ -159,8 +159,8 @@ const login = async (email, password) => {
 
   console.log(`Attempting login for: ${trimmedEmail}`);
 
-  const [rows] = await db.query('SELECT * FROM users WHERE email = ?', [trimmedEmail]);
-  const user = rows[0];
+  const result = await db.query('SELECT * FROM users WHERE email = $1', [trimmedEmail]);
+  const user = result.rows[0];
 
   if (!user) {
     throw new Error('No account found with this email. Please register first.');
@@ -195,20 +195,20 @@ const login = async (email, password) => {
 };
 
 const getMe = async (userId) => {
-  const [rows] = await db.query(
-    'SELECT id, name, email, role, hostel, room_number, phone, gender, is_verified FROM users WHERE id = ?',
+  const result = await db.query(
+    'SELECT id, name, email, role, hostel, room_number, phone, gender, is_verified FROM users WHERE id = $1',
     [userId]
   );
-  return rows[0];
+  return result.rows[0];
 };
 
 const getUserById = async (userId) => {
-  const [rows] = await db.query(
-    'SELECT id, name, hostel FROM users WHERE id = ?',
+  const result = await db.query(
+    'SELECT id, name, hostel FROM users WHERE id = $1',
     [userId]
   );
-  if (rows.length === 0) throw new Error('User not found');
-  return rows[0];
+  if (result.rows.length === 0) throw new Error('User not found');
+  return result.rows[0];
 };
 
 module.exports = {
