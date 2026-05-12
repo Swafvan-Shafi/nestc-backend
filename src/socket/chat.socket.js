@@ -4,12 +4,21 @@ const { sendChatNotification } = require('../utils/mailer');
 
 const registerChatHandlers = (io, socket) => {
   socket.on('register_user', (userId) => {
+    socket.userId = userId;
     socket.join(`user_${userId}`);
     console.log(`📡 User ${userId} registered for global notifications`);
   });
 
-  socket.on('join_chat', (chatId) => {
+  socket.on('join_chat', async (chatId) => {
     socket.join(chatId);
+    if (socket.userId) {
+      try {
+        await db.query('UPDATE chat_messages SET is_delivered = 1 WHERE chat_id = $1 AND sender_id != $2', [chatId, socket.userId]);
+        io.to(chatId).emit('messages_delivered', { chatId });
+      } catch (err) {
+        console.error('Error marking messages as delivered:', err);
+      }
+    }
   });
 
   socket.on('send_message', async (data) => {
@@ -49,11 +58,14 @@ const registerChatHandlers = (io, socket) => {
       const pContextStr = productContext ? JSON.stringify(productContext) : null;
 
       console.log('💾 Saving message to DB...');
+      const room = io.sockets.adapter.rooms.get(finalChatId);
+      const isDelivered = (room && room.size > 1) ? 1 : 0;
+      
       await db.query(
-        'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id, product_context) VALUES ($1, $2, $3, $4, $5, $6)',
-        [messageId, finalChatId, senderId, content, listingId || null, pContextStr]
+        'INSERT INTO chat_messages (id, chat_id, sender_id, content, listing_id, product_context, is_delivered) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [messageId, finalChatId, senderId, content, listingId || null, pContextStr, isDelivered]
       );
-      console.log('✅ Message saved successfully');
+      console.log(`✅ Message saved successfully (Delivered: ${isDelivered})`);
       
       const message = {
         id: messageId,
@@ -63,13 +75,15 @@ const registerChatHandlers = (io, socket) => {
         listing_id: listingId || null,
         product_context: productContext || null,
         created_at: new Date(),
-        is_read: false
+        is_read: false,
+        is_delivered: !!isDelivered
       };
       
       // Emit to the deterministic room
       io.to(finalChatId).emit('new_message', { chatId: finalChatId, message });
 
       if (receiverId) {
+        // Also notify specifically the user's global listener
         io.to(`user_${receiverId}`).emit('new_message', { chatId: finalChatId, message });
         
         let displayBody = content;
