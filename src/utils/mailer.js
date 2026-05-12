@@ -11,7 +11,8 @@ const transporter = nodemailer.createTransport({
  
 transporter.verify((error, success) => {
   if (error) {
-    console.error('❌ Mailer connection error:', error);
+    console.error('❌ Mailer connection error:', error.message);
+    console.error('📋 SMTP Config:', { user: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0,3)}...` : 'MISSING', pass: process.env.EMAIL_PASS ? 'PRESENT' : 'MISSING' });
   } else {
     console.log('🚀 Mailer is ready to send notifications');
   }
@@ -96,6 +97,7 @@ const sendChatNotification = async (email, senderName, messageContent, productIn
     return true;
   } catch (err) {
     console.error(`❌ Failed to send chat email to ${email}:`, err);
+    console.error('🔍 Full Error Stack:', err.stack);
     return false;
   }
 };
